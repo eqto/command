@@ -207,5 +207,6 @@ func New(fn func(<-chan int), max int) *Service {
 		s.workers = append(s.workers, w)
 		s.queue <- w
 	}
+	services = append(services, s)
 	return s
 }
