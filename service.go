@@ -158,7 +158,7 @@ func (s *Service) start() {
 
 //Start ...
 func Start() error {
-	if exitSignal == nil {
+	if exitSignal != nil {
 		return errors.New(`services already running`)
 	}
 	for _, s := range services {
