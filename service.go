@@ -2,7 +2,7 @@
  * @Author: tuxer
  * @Date: 2020-06-18 14:05:19
  * @Last Modified by: tuxer
- * @Last Modified time: 2020-06-19 14:50:43
+ * @Last Modified time: 2020-07-08 15:31:53
  */
 
 package service
@@ -10,8 +10,13 @@ package service
 import (
 	"errors"
 	"io/ioutil"
+	"log"
 	"os"
+	"os/exec"
+	"os/signal"
+	"path/filepath"
 	"strconv"
+	"strings"
 	"sync"
 	"syscall"
 )
@@ -21,9 +26,34 @@ var (
 	services   = []*Service{}
 
 	doneSignal chan bool
+
+	debugLog = log.Println
+	infoLog  = log.Println
+	errorLog = log.Println
+
+	filename    = ``
+	hadWritePID bool
 )
 
+//Log ...
+func Log(d, i, e func(...interface{})) {
+	debugLog = d
+	infoLog = i
+	errorLog = e
+}
+
+func writePID() error {
+	if !hadWritePID {
+		os.MkdirAll(filepath.Dir(filename), 0755)
+		if e := ioutil.WriteFile(filename+`.pid`, []byte(strconv.Itoa(os.Getpid())), 0644); e != nil {
+			return e
+		}
+	}
+	return nil
+}
+
 //WritePID ...
+//!deprecated check with ProcessExist()
 func WritePID(filename string) error {
 	data, e := ioutil.ReadFile(filename)
 	if e == nil {
@@ -41,6 +71,36 @@ func WritePID(filename string) error {
 	}
 	if e := ioutil.WriteFile(filename, []byte(strconv.Itoa(os.Getpid())), 0644); e != nil {
 		return e
+	}
+	return nil
+}
+
+//Filename get application name
+func Filename() string {
+	_, file := filepath.Split(os.Args[0])
+	ext := filepath.Ext(file)
+	return file[:len(file)-len(ext)]
+}
+
+//ProcessExist return error when not exist (linux only)
+func ProcessExist() error {
+	data, e := ioutil.ReadFile(filename + `.pid`)
+	if e != nil {
+		return e
+	}
+	_, e = strconv.Atoi(string(data))
+	if e != nil {
+		return errors.New(`pid file not found`)
+	}
+	cmd := exec.Command(`ps`, `-p`, string(data), `-o`, `comm=`)
+	out, e := cmd.Output()
+
+	if e != nil {
+		return errors.New(`unable to check process id: ` + string(data))
+	}
+
+	if strings.TrimSpace(string(out)) != Filename() {
+		return errors.New(`pid not match`)
 	}
 	return nil
 }
@@ -69,55 +129,6 @@ func (s *Service) MaxThread() int {
 	return cap(s.queue)
 }
 
-//Start ...
-//  func (s *Service) Start() error {
-// 	 if s.done != nil {
-// 		 return errors.New(`service already running`)
-// 	 }
-// 	 s.done = make(chan bool)
-// 	 s.sign = make(chan os.Signal, 1)
-// 	 signal.Notify(s.sign, syscall.SIGINT, syscall.SIGTERM)
-
-// 	 go func() {
-// 		 <-s.sign
-// 		 println(`service stopping`)
-// 		 close(s.queue)
-// 	 }()
-
-// 	 go func() {
-// 		 for s.queue != nil {
-// 			 if w, ok := <-s.queue; ok {
-// 				 go func(w *worker) {
-// 					 defer func() {
-// 						 if r := recover(); r != nil {
-// 							 println(r)
-// 						 }
-// 					 }()
-// 					 s.wg.Add(1)
-// 					 s.fn(w.done)
-// 					 if s.queue != nil {
-// 						 s.queue <- w
-// 					 }
-// 					 s.wg.Done()
-// 				 }(w)
-// 			 } else {
-// 				 s.queue = nil
-// 			 }
-// 		 }
-// 		 for i := 0; i < len(s.workers); i++ {
-// 			 w := s.workers[i]
-// 			 go func(w *worker) {
-// 				 w.done <- w.id
-// 			 }(w)
-// 		 }
-
-// 		 s.wg.Wait()
-// 		 s.done <- true
-// 	 }()
-
-// 	 return nil
-//  }
-
 func (s *Service) start() {
 	if s.doneCh != nil {
 		return
@@ -130,15 +141,15 @@ func (s *Service) start() {
 				go func(w *worker) {
 					defer func() {
 						if r := recover(); r != nil {
-							println(r)
+							errorLog(r)
 						}
 					}()
 					s.wg.Add(1)
+					defer s.wg.Done()
 					s.fn(w.done)
 					if s.queue != nil {
 						s.queue <- w
 					}
-					s.wg.Done()
 				}(w)
 			} else {
 				s.queue = nil
@@ -156,8 +167,14 @@ func (s *Service) start() {
 	}()
 }
 
+//SetPidName ...
+func SetPidName(name string) {
+	filename = name
+}
+
 //Start ...
 func Start() error {
+	writePID()
 	if exitSignal != nil {
 		return errors.New(`services already running`)
 	}
@@ -166,6 +183,7 @@ func Start() error {
 	}
 	exitSignal = make(chan os.Signal, 1)
 	doneSignal = make(chan bool, 1)
+	signal.Notify(exitSignal, syscall.SIGINT, syscall.SIGQUIT)
 	go func() {
 		<-exitSignal
 		Stop()
@@ -175,11 +193,11 @@ func Start() error {
 
 //Stop ...
 func Stop() {
-	println(`Service stopping`)
+	infoLog(`Service stopping`)
 	wg := sync.WaitGroup{}
+	wg.Add(len(services))
 	for _, s := range services {
 		go func(s *Service) {
-			wg.Add(1)
 			defer wg.Done()
 			close(s.queue)
 			<-s.doneCh
@@ -189,6 +207,7 @@ func Stop() {
 	if len(doneSignal) == 0 {
 		doneSignal <- true
 	}
+	os.Remove(filename + `.pid`)
 }
 
 //Wait ...
@@ -200,7 +219,13 @@ func Wait() {
 }
 
 //New ...
+//!deprecated use Add() instead
 func New(fn func(<-chan int), max int) *Service {
+	return Add(fn, max)
+}
+
+//Add ...
+func Add(fn func(<-chan int), max int) *Service {
 	s := &Service{fn: fn, queue: make(chan *worker, max)}
 	for len(s.queue) < cap(s.queue) {
 		w := &worker{id: len(s.queue) + 1, done: make(chan int, 1)}
@@ -209,4 +234,44 @@ func New(fn func(<-chan int), max int) *Service {
 	}
 	services = append(services, s)
 	return s
+}
+
+//Cmd get command (first argument) when running app
+func Cmd() string {
+	if len(os.Args) > 1 {
+		return strings.TrimSpace(os.Args[1])
+	}
+	return ``
+}
+
+//CmdInt get command (first argument) when running app
+func CmdInt() int {
+	cmd := Cmd()
+	if cmd != `` {
+		if i, e := strconv.Atoi(cmd); e == nil {
+			return i
+		}
+	}
+	return 0
+}
+
+//Arg get arguments after command
+func Arg(idx int) string {
+	if ArgExist(idx) {
+		return strings.TrimSpace(os.Args[idx+2])
+	}
+	return ``
+}
+
+//ArgInt get arguments after command
+func ArgInt(idx int) int {
+	if i, e := strconv.Atoi(Arg(idx)); e == nil {
+		return i
+	}
+	return 0
+}
+
+//ArgExist ...
+func ArgExist(idx int) bool {
+	return len(os.Args)-2 > idx
 }
