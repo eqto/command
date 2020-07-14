@@ -2,7 +2,7 @@
  * @Author: tuxer
  * @Date: 2020-06-18 14:05:19
  * @Last Modified by: tuxer
- * @Last Modified time: 2020-07-08 15:31:53
+ * @Last Modified time: 2020-07-14 20:12:48
  */
 
 package service
@@ -31,7 +31,7 @@ var (
 	infoLog  = log.Println
 	errorLog = log.Println
 
-	filename    = ``
+	pidfile     = ``
 	hadWritePID bool
 )
 
@@ -44,33 +44,10 @@ func Log(d, i, e func(...interface{})) {
 
 func writePID() error {
 	if !hadWritePID {
-		os.MkdirAll(filepath.Dir(filename), 0755)
-		if e := ioutil.WriteFile(filename+`.pid`, []byte(strconv.Itoa(os.Getpid())), 0644); e != nil {
+		os.MkdirAll(filepath.Dir(pidfile), 0755)
+		if e := ioutil.WriteFile(pidfile+`.pid`, []byte(strconv.Itoa(os.Getpid())), 0644); e != nil {
 			return e
 		}
-	}
-	return nil
-}
-
-//WritePID ...
-//!deprecated check with ProcessExist()
-func WritePID(filename string) error {
-	data, e := ioutil.ReadFile(filename)
-	if e == nil {
-		pid, e := strconv.Atoi(string(data))
-		if e != nil {
-			os.Remove(filename)
-		} else {
-			proc, _ := os.FindProcess(pid)
-			if e := proc.Signal(syscall.Signal(0)); e != nil {
-				os.Remove(filename)
-			} else {
-				return errors.New(`service already running`)
-			}
-		}
-	}
-	if e := ioutil.WriteFile(filename, []byte(strconv.Itoa(os.Getpid())), 0644); e != nil {
-		return e
 	}
 	return nil
 }
@@ -84,7 +61,7 @@ func Filename() string {
 
 //ProcessExist return error when not exist (linux only)
 func ProcessExist() error {
-	data, e := ioutil.ReadFile(filename + `.pid`)
+	data, e := ioutil.ReadFile(pidfile + `.pid`)
 	if e != nil {
 		return e
 	}
@@ -167,9 +144,35 @@ func (s *Service) start() {
 	}()
 }
 
-//SetPidName ...
-func SetPidName(name string) {
-	filename = name
+//SetPidFile ...
+func SetPidFile(name string) {
+	pidfile = name
+}
+
+//StartService ...
+func StartService(args ...string) error {
+	cmd := exec.Command(`./`+Filename(), args...)
+	if e := cmd.Start(); e != nil {
+		return e
+	}
+	return nil
+}
+
+//StopService ...
+func StopService() error {
+	data, e := ioutil.ReadFile(pidfile + `.pid`)
+	if e != nil {
+		return e
+	}
+	pid, e := strconv.Atoi(strings.TrimSpace(string(data)))
+	if e != nil {
+		return e
+	}
+	proc, e := os.FindProcess(pid)
+	if e != nil {
+		return e
+	}
+	return proc.Signal(os.Interrupt)
 }
 
 //Start ...
@@ -193,13 +196,14 @@ func Start() error {
 
 //Stop ...
 func Stop() {
-	infoLog(`Service stopping`)
 	wg := sync.WaitGroup{}
 	wg.Add(len(services))
 	for _, s := range services {
 		go func(s *Service) {
 			defer wg.Done()
-			close(s.queue)
+			if s.queue != nil {
+				close(s.queue)
+			}
 			<-s.doneCh
 		}(s)
 	}
@@ -207,7 +211,7 @@ func Stop() {
 	if len(doneSignal) == 0 {
 		doneSignal <- true
 	}
-	os.Remove(filename + `.pid`)
+	os.Remove(pidfile + `.pid`)
 }
 
 //Wait ...
