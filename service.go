@@ -1,10 +1,3 @@
-/*
- * @Author: tuxer
- * @Date: 2020-06-18 14:05:19
- * @Last Modified by: tuxer
- * @Last Modified time: 2020-07-14 20:12:48
- */
-
 package service
 
 import (
