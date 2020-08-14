@@ -1,3 +1,3 @@
-module gitlab.com/tuxer/go-service
+module github.com/eqto/service
 
 go 1.14
