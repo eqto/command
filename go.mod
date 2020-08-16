@@ -1,3 +1,3 @@
-module github.com/eqto/service
+module github.com/eqto/go-service
 
 go 1.14
