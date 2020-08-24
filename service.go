@@ -255,7 +255,7 @@ func CmdInt() int {
 //Arg get arguments after command
 func Arg(idx int) string {
 	if ArgExist(idx) {
-		return strings.TrimSpace(os.Args[idx+2])
+		return strings.TrimSpace(os.Args[idx+1])
 	}
 	return ``
 }
@@ -270,5 +270,5 @@ func ArgInt(idx int) int {
 
 //ArgExist ...
 func ArgExist(idx int) bool {
-	return len(os.Args)-2 > idx
+	return len(os.Args)-1 > idx
 }
