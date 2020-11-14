@@ -18,8 +18,6 @@ var (
 	exitSignal chan os.Signal
 	services   = []*Service{}
 
-	doneSignal chan bool
-
 	debugLog = log.Println
 	infoLog  = log.Println
 	errorLog = log.Println
@@ -95,7 +93,6 @@ func Start() error {
 		s.start()
 	}
 	exitSignal = make(chan os.Signal, 1)
-	doneSignal = make(chan bool, 1)
 	signal.Notify(exitSignal, syscall.SIGINT, syscall.SIGQUIT)
 	go func() {
 		<-exitSignal
@@ -106,30 +103,23 @@ func Start() error {
 
 //Stop ...
 func Stop() {
+	for _, s := range services {
+		s.stop()
+	}
+}
+
+//Wait ...
+func Wait() {
 	wg := sync.WaitGroup{}
 	wg.Add(len(services))
 	for _, s := range services {
 		go func(s *Service) {
 			defer wg.Done()
-			if s.queue != nil {
-				close(s.queue)
-			}
 			<-s.doneCh
 		}(s)
 	}
 	wg.Wait()
-	if len(doneSignal) == 0 {
-		doneSignal <- true
-	}
 	os.Remove(pidfile + `.pid`)
-}
-
-//Wait ...
-func Wait() {
-	if doneSignal == nil {
-		return
-	}
-	<-doneSignal
 }
 
 //New ...

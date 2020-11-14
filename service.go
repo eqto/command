@@ -14,8 +14,8 @@ type Service struct {
 	fn      func(<-chan int)
 	queue   chan *worker
 	workers []*worker
-	wg      sync.WaitGroup
 	doneCh  chan bool
+	running bool
 }
 
 //AvailableThread ...
@@ -33,37 +33,51 @@ func (s *Service) start() {
 		return
 	}
 	s.doneCh = make(chan bool)
+	s.running = true
 
-	go func() {
-		for s.queue != nil {
-			if w, ok := <-s.queue; ok {
-				go func(w *worker) {
-					defer func() {
-						if r := recover(); r != nil {
-							errorLog(r)
-						}
-					}()
-					s.wg.Add(1)
-					defer s.wg.Done()
-					s.fn(w.done)
-					if s.queue != nil {
-						s.queue <- w
-					}
-				}(w)
-			} else {
-				s.queue = nil
-			}
-		}
-		for i := 0; i < len(s.workers); i++ {
-			w := s.workers[i]
+	go s.run()
+}
+
+func (s *Service) run() {
+	wg := sync.WaitGroup{}
+
+	for s.running {
+		if w, ok := <-s.queue; ok {
 			go func(w *worker) {
-				w.done <- w.id
+				defer func() {
+					if r := recover(); r != nil {
+						errorLog(r)
+					}
+				}()
+				wg.Add(1)
+				defer wg.Done()
+				s.fn(w.done)
+				if s.running {
+					s.queue <- w
+				}
 			}(w)
+		} else {
+			s.running = false
 		}
+	}
+	wg.Wait()
+	s.running = false
+	s.doneCh <- true
+}
 
-		s.wg.Wait()
-		s.doneCh <- true
-	}()
+func (s *Service) stop() {
+	if s.running == false {
+		return
+	}
+	s.running = false
+	if s.queue != nil {
+		close(s.queue)
+		s.queue = nil
+	}
+	for i := 0; i < len(s.workers); i++ {
+		w := s.workers[i]
+		w.done <- w.id
+	}
 }
 
 //StartService ...
