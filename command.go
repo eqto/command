@@ -22,8 +22,7 @@ var (
 	infoLog  = log.Println
 	errorLog = log.Println
 
-	pidfile     = ``
-	hadWritePID bool
+	pidfile = ``
 )
 
 //Log ...
@@ -31,16 +30,6 @@ func Log(d, i, e func(...interface{})) {
 	debugLog = d
 	infoLog = i
 	errorLog = e
-}
-
-func writePID() error {
-	if !hadWritePID {
-		os.MkdirAll(filepath.Dir(pidfile), 0755)
-		if e := ioutil.WriteFile(pidfile+`.pid`, []byte(strconv.Itoa(os.Getpid())), 0644); e != nil {
-			return e
-		}
-	}
-	return nil
 }
 
 //Filename get application name
@@ -85,7 +74,6 @@ func SetPidFile(name string) {
 
 //Start ...
 func Start() error {
-	writePID()
 	if exitSignal != nil {
 		return errors.New(`services already running`)
 	}

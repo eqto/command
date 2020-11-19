@@ -4,6 +4,7 @@ import (
 	"io/ioutil"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"sync"
@@ -84,6 +85,10 @@ func (s *Service) stop() {
 func StartService(args ...string) error {
 	cmd := exec.Command(`./`+Filename(), args...)
 	if e := cmd.Start(); e != nil {
+		return e
+	}
+	os.MkdirAll(filepath.Dir(pidfile), 0755)
+	if e := ioutil.WriteFile(pidfile+`.pid`, []byte(strconv.Itoa(cmd.Process.Pid)), 0644); e != nil {
 		return e
 	}
 	return nil
