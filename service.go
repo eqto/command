@@ -88,7 +88,7 @@ func StartService(args ...string) error {
 		return e
 	}
 	os.MkdirAll(filepath.Dir(pidfile), 0755)
-	if e := ioutil.WriteFile(pidfile+`.pid`, []byte(strconv.Itoa(cmd.Process.Pid)), 0644); e != nil {
+	if e := ioutil.WriteFile(pidfile, []byte(strconv.Itoa(cmd.Process.Pid)), 0644); e != nil {
 		return e
 	}
 	return nil
@@ -96,7 +96,7 @@ func StartService(args ...string) error {
 
 //StopService ...
 func StopService() error {
-	data, e := ioutil.ReadFile(pidfile + `.pid`)
+	data, e := ioutil.ReadFile(pidfile)
 	if e != nil {
 		return e
 	}

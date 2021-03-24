@@ -41,7 +41,7 @@ func Filename() string {
 
 //ProcessExist return error when not exist (linux only)
 func ProcessExist() error {
-	data, e := ioutil.ReadFile(pidfile + `.pid`)
+	data, e := ioutil.ReadFile(pidfile)
 	if e != nil {
 		return e
 	}
@@ -107,7 +107,7 @@ func Wait() {
 		}(s)
 	}
 	wg.Wait()
-	os.Remove(pidfile + `.pid`)
+	os.Remove(pidfile)
 }
 
 //New ...
