@@ -160,6 +160,11 @@ func Get(key string) string {
 	return ``
 }
 
+//Args get all arguments after command
+func Args() []string {
+	return os.Args[2:]
+}
+
 //Arg get arguments after command
 func Arg(idx int) string {
 	if ArgExist(idx) {
