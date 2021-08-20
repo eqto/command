@@ -35,8 +35,7 @@ func Log(d, i, e func(...interface{})) {
 //Filename get application name
 func Filename() string {
 	_, file := filepath.Split(os.Args[0])
-	ext := filepath.Ext(file)
-	return file[:len(file)-len(ext)]
+	return file
 }
 
 //ProcessExist return error when not exist (linux only)
@@ -108,12 +107,6 @@ func Wait() {
 	}
 	wg.Wait()
 	os.Remove(pidfile)
-}
-
-//New ...
-//!deprecated use Add() instead
-func New(fn func(<-chan int), max int) *Service {
-	return Add(fn, max)
 }
 
 //Add ...
