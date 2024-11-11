@@ -22,23 +22,25 @@ var (
 	infoLog  = log.Println
 	errorLog = log.Println
 
+	filteredArgs []string
+
 	pidfile = ``
 )
 
-//Log ...
+// Log ...
 func Log(d, i, e func(...interface{})) {
 	debugLog = d
 	infoLog = i
 	errorLog = e
 }
 
-//Filename get application name
+// Filename get application name
 func Filename() string {
 	_, file := filepath.Split(os.Args[0])
 	return file
 }
 
-//ProcessExist return error when not exist (linux only)
+// ProcessExist return error when not exist (linux only)
 func ProcessExist() error {
 	data, e := ioutil.ReadFile(pidfile)
 	if e != nil {
@@ -66,12 +68,12 @@ type worker struct {
 	done chan int
 }
 
-//SetPidFile ...
+// SetPidFile ...
 func SetPidFile(name string) {
 	pidfile = name
 }
 
-//Start ...
+// Start ...
 func Start() error {
 	if exitSignal != nil {
 		return errors.New(`services already running`)
@@ -88,14 +90,14 @@ func Start() error {
 	return nil
 }
 
-//Stop ...
+// Stop ...
 func Stop() {
 	for _, s := range services {
 		s.stop()
 	}
 }
 
-//Wait ...
+// Wait ...
 func Wait() {
 	wg := sync.WaitGroup{}
 	wg.Add(len(services))
@@ -109,7 +111,7 @@ func Wait() {
 	os.Remove(pidfile)
 }
 
-//Add ...
+// Add ...
 func Add(fn func(<-chan int), max int) *Service {
 	s := &Service{fn: fn, queue: make(chan *worker, max)}
 	for len(s.queue) < cap(s.queue) {
@@ -121,7 +123,7 @@ func Add(fn func(<-chan int), max int) *Service {
 	return s
 }
 
-//Cmd get command (first argument) when running app
+// Cmd get command (first argument) when running app
 func Cmd() string {
 	if len(os.Args) > 1 {
 		return strings.TrimSpace(os.Args[1])
@@ -129,7 +131,7 @@ func Cmd() string {
 	return ``
 }
 
-//CmdInt get command (first argument) when running app
+// CmdInt get command (first argument) when running app
 func CmdInt() int {
 	cmd := Cmd()
 	if cmd != `` {
@@ -140,7 +142,7 @@ func CmdInt() int {
 	return 0
 }
 
-//Get get argument with value.
+// Get get argument with value.
 // Ex:
 // --config=path.cfg
 // Get(`config`) = path.cfg
@@ -153,20 +155,39 @@ func Get(key string) string {
 	return ``
 }
 
-//Args get all arguments after command
-func Args() []string {
-	return os.Args[2:]
+// Get get argument with value.
+// Ex:
+// --config=path.cfg
+// Get(`config`) = path.cfg
+func GetInt(key string) int {
+	val := Get(key)
+	if i, e := strconv.Atoi(val); e == nil {
+		return i
+	}
+	return 0
 }
 
-//Arg get arguments after command
+// Args get all arguments after command
+func Args() []string {
+	if filteredArgs == nil {
+		for _, arg := range os.Args[2:] {
+			if !strings.HasPrefix(arg, `--`) {
+				filteredArgs = append(filteredArgs, arg)
+			}
+		}
+	}
+	return filteredArgs
+}
+
+// Arg get arguments after command
 func Arg(idx int) string {
 	if ArgExist(idx) {
-		return strings.TrimSpace(os.Args[idx+2])
+		return strings.TrimSpace(filteredArgs[idx])
 	}
 	return ``
 }
 
-//ArgInt get arguments after command
+// ArgInt get arguments after command
 func ArgInt(idx int) int {
 	if i, e := strconv.Atoi(Arg(idx)); e == nil {
 		return i
@@ -174,7 +195,7 @@ func ArgInt(idx int) int {
 	return 0
 }
 
-//ArgExist ...
+// ArgExist ...
 func ArgExist(idx int) bool {
-	return len(os.Args)-2 > idx
+	return len(Args()) > idx
 }
